@@ -1,0 +1,21 @@
+# Python virtual environment
+.venv/
+venv/
+
+# Sensitive Google session cookies & local caches
+storage_state.json
+browser_profile/
+notebook_id.txt
+
+# Python compiled cache
+__pycache__/
+*.pyc
+
+# Local runtime logs
+logs/
+*.log
+
+# Exclude custom documents in sources/ except for sample files
+sources/*
+!sources/notes.txt
+!sources/sample.pdf

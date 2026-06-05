@@ -1,0 +1,19 @@
+Project Phoenix: Next-Generation Agentic Framework
+===================================================
+
+Overview
+--------
+Project Phoenix is our internal initiative to design a highly scalable, multi-agent framework
+for complex software development. Unlike single-agent architectures, Phoenix utilizes specialized
+subagents that communicate over a secure message broker (gRPC-based).
+
+Key Architectures & Main Ideas:
+1. Orchestrator-Worker Model: A central Orchestrator coordinates work, decomposes user requests into tasks, and monitors status. Specialized Worker agents execute tasks (e.g. Code Writer, Code Reviewer, Security Analyst).
+2. Human-in-the-Loop (HITL) Gate: Critical actions, such as executing write commands on the host filesystem or committing to production branches, require explicit human confirmation.
+3. Event-Driven Messaging: Agents register to topics and broadcast events. This allows asynchronous execution and automatic retry logic upon failures.
+
+Key Action Items:
+* Action Item 1: Set up the gRPC interface definitions (protobufs) for inter-agent communication by Q3.
+* Action Item 2: Implement the HITL approval CLI tool for local sandbox execution by end of next month.
+* Action Item 3: Design the logging service to capture full agent communication transcripts for debugging.
+* Action Item 4: Run a security audit on the unsandboxed terminal execution capabilities.
