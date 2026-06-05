@@ -220,6 +220,80 @@ async def query_notebook(client, notebook_id, query):
                 logger.error("All query retry attempts exhausted. Query failed.")
                 return False
 
+async def interactive_loop(client, notebook_id):
+    """Starts an interactive session to query and add sources dynamically."""
+    logger.info("\n" + "="*70)
+    logger.info("INTERACTIVE NOTEBOOKLM SESSION STARTED")
+    logger.info("Commands:")
+    logger.info("  /add <path_or_url>  - Ingest a local file path or URL dynamically")
+    logger.info("  /list               - List all ingested sources and their index status")
+    logger.info("  /exit               - Exit the session")
+    logger.info("  Or just type your question to query the notebook.")
+    logger.info("="*70 + "\n")
+    
+    # Enable reading input asynchronously in a executor so it doesn't block the loop
+    loop = asyncio.get_event_loop()
+    
+    while True:
+        try:
+            # Run blocking input() inside a separate thread
+            user_input = await loop.run_in_executor(None, input, "[NotebookLM] > ")
+            user_input = user_input.strip()
+        except (KeyboardInterrupt, EOFError):
+            logger.info("\nExiting session...")
+            break
+            
+        if not user_input:
+            continue
+            
+        user_input_lower = user_input.lower()
+        if user_input_lower == '/exit':
+            logger.info("Exiting session...")
+            break
+            
+        elif user_input_lower == '/list':
+            try:
+                sources = await client.sources.list(notebook_id)
+                logger.info("\nIngested Sources:")
+                for src in sources:
+                    status_str = "Ready" if src.status == 2 else ("Error" if src.status == 3 else "Indexing")
+                    logger.info(f" - {src.title or src.url} [{status_str}]")
+                logger.info("")
+            except Exception as e:
+                logger.error(f"Failed to list sources: {e}")
+            continue
+            
+        elif user_input_lower.startswith('/add '):
+            source_path = user_input[5:].strip()
+            if not source_path:
+                logger.warning("Please specify a file path or URL after /add")
+                continue
+                
+            # Check if web URL
+            if source_path.lower().startswith(('http://', 'https://')):
+                logger.info(f"Uploading URL source dynamically: {source_path}...")
+                try:
+                    await client.sources.add_url(notebook_id, source_path, wait=True)
+                    logger.info("URL successfully added and indexed.")
+                except Exception as e:
+                    logger.error(f"Failed to add URL: {e}")
+            else:
+                # Local file
+                if not os.path.exists(source_path):
+                    logger.error(f"Local file not found: {source_path}")
+                else:
+                    logger.info(f"Uploading file source dynamically: {source_path}...")
+                    try:
+                        await client.sources.add_file(notebook_id, source_path)
+                        logger.info("File successfully uploaded.")
+                        await wait_for_sources_ready(client, notebook_id)
+                    except Exception as e:
+                        logger.error(f"Failed to add file: {e}")
+            continue
+            
+        # Default: Treat as a query
+        await query_notebook(client, notebook_id, user_input)
+
 async def main():
     client_ctx = await get_client()
     
@@ -237,8 +311,11 @@ async def main():
         # If the user passed a custom query in the command line, ask that.
         # Otherwise, ask the default questions in config.py
         if len(sys.argv) > 1:
-            custom_query = " ".join(sys.argv[1:])
-            await query_notebook(client, nb.id, custom_query)
+            if sys.argv[1] in ('-i', '--interactive'):
+                await interactive_loop(client, nb.id)
+            else:
+                custom_query = " ".join(sys.argv[1:])
+                await query_notebook(client, nb.id, custom_query)
         else:
             for question in config.QUESTIONS:
                 await query_notebook(client, nb.id, question)

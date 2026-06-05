@@ -102,7 +102,7 @@ python notebooklm_demo.py
 
 ## How to Query
 
-You can query your notebook in three different ways:
+You can query your notebook in four different ways:
 
 ### Option 1: Run with a Custom Argument (Recommended)
 You can ask custom questions on the fly by passing the query directly as an argument:
@@ -111,13 +111,23 @@ python notebooklm_demo.py "What is the key architecture of Project Phoenix?"
 ```
 *This will run the script, check for new sources, and answer only your custom question.*
 
-### Option 2: Configure Default Questions
+### Option 2: Run in Interactive Session Mode
+You can start a dynamic interactive session in your terminal where you can add files, URLs, list sources, and chat continuously:
+```bash
+python notebooklm_demo.py -i
+```
+- `/add <path_or_url>`: Upload a local PDF/TXT file or URL dynamically.
+- `/list`: Display all ingested sources and their indexing status.
+- Type any text: Query the notebook and fetch the RAG response.
+- `/exit`: Quit the interactive loop.
+
+### Option 3: Configure Default Questions
 Edit the `QUESTIONS` list in `config.py` and run the script:
 ```bash
 python notebooklm_demo.py
 ```
 
-### Option 3: Use the Native CLI
+### Option 4: Use the Native CLI
 Since you are logged in, you can query directly using the `notebooklm` command line utility:
 
 1. Target your notebook (copy the ID from `notebook_id.txt`):
