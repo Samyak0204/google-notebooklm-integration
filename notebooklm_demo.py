@@ -220,13 +220,35 @@ async def query_notebook(client, notebook_id, query):
                 logger.error("All query retry attempts exhausted. Query failed.")
                 return False
 
+def run_cli_command(args):
+    """Executes a notebooklm CLI command using the virtual environment interpreter."""
+    import subprocess
+    cli_exe = os.path.join(config.WORKSPACE_DIR, ".venv", "Scripts", "notebooklm")
+    if sys.platform != 'win32':
+        cli_exe = os.path.join(config.WORKSPACE_DIR, ".venv", "bin", "notebooklm")
+        
+    if not os.path.exists(cli_exe):
+        cli_exe = "notebooklm"  # Fallback to system PATH
+        
+    cmd = [cli_exe] + args
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return True, result.stdout
+    except subprocess.CalledProcessError as e:
+        return False, f"Command failed: {e.stderr or e.stdout}"
+    except Exception as e:
+        return False, f"Process execution failed: {e}"
+
 async def interactive_loop(client, notebook_id):
     """Starts an interactive session to query and add sources dynamically."""
     logger.info("\n" + "="*70)
     logger.info("INTERACTIVE NOTEBOOKLM SESSION STARTED")
     logger.info("Commands:")
-    logger.info("  /add <path_or_url>  - Ingest a local file path or URL dynamically")
+    logger.info("  /add <path_or_url>  - Ingest a local file path or URL (e.g. YouTube video)")
     logger.info("  /list               - List all ingested sources and their index status")
+    logger.info("  /podcast [prompt]   - Generate and download Audio Podcast to logs/podcast.mp3")
+    logger.info("  /paper [prompt]     - Generate and download Briefing Paper to logs/paper.md")
+    logger.info("  /studyguide         - Generate and download Study Guide to logs/study_guide.md")
     logger.info("  /exit               - Exit the session")
     logger.info("  Or just type your question to query the notebook.")
     logger.info("="*70 + "\n")
@@ -261,6 +283,67 @@ async def interactive_loop(client, notebook_id):
                 logger.info("")
             except Exception as e:
                 logger.error(f"Failed to list sources: {e}")
+            continue
+            
+        elif user_input_lower.startswith('/podcast'):
+            prompt = user_input[8:].strip()
+            logger.info("Triggering Audio Overview Podcast generation on Google servers (this can take 2-4 minutes)...")
+            
+            gen_args = ["generate", "audio", "-n", notebook_id, "--wait"]
+            if prompt:
+                gen_args.append(prompt)
+                
+            success, out = run_cli_command(gen_args)
+            if not success:
+                logger.error(f"Failed to generate podcast: {out}")
+                continue
+                
+            logger.info("Audio generation complete. Downloading podcast to logs/podcast.mp3...")
+            output_file = os.path.join(config.LOGS_DIR, "podcast.mp3")
+            success, out = run_cli_command(["download", "audio", "-n", notebook_id, "--force", output_file])
+            if success:
+                logger.info(f"Success! Podcast downloaded to: {output_file}")
+            else:
+                logger.error(f"Failed to download podcast file: {out}")
+            continue
+            
+        elif user_input_lower.startswith('/paper'):
+            prompt = user_input[6:].strip()
+            logger.info("Generating Briefing Paper/Report on Google servers...")
+            
+            gen_args = ["generate", "report", "-n", notebook_id, "--wait"]
+            if prompt:
+                # If they passed specific guidelines, run it custom
+                gen_args.extend(["--format", "custom", prompt])
+                
+            success, out = run_cli_command(gen_args)
+            if not success:
+                logger.error(f"Failed to generate report: {out}")
+                continue
+                
+            logger.info("Report generation complete. Downloading briefing paper to logs/paper.md...")
+            output_file = os.path.join(config.LOGS_DIR, "paper.md")
+            success, out = run_cli_command(["download", "report", "-n", notebook_id, "--force", output_file])
+            if success:
+                logger.info(f"Success! Briefing paper downloaded to: {output_file}")
+            else:
+                logger.error(f"Failed to download report file: {out}")
+            continue
+            
+        elif user_input_lower == '/studyguide':
+            logger.info("Generating Study Guide on Google servers...")
+            success, out = run_cli_command(["generate", "report", "-n", notebook_id, "--format", "study-guide", "--wait"])
+            if not success:
+                logger.error(f"Failed to generate study guide: {out}")
+                continue
+                
+            logger.info("Study guide complete. Downloading to logs/study_guide.md...")
+            output_file = os.path.join(config.LOGS_DIR, "study_guide.md")
+            success, out = run_cli_command(["download", "report", "-n", notebook_id, "--force", output_file])
+            if success:
+                logger.info(f"Success! Study guide downloaded to: {output_file}")
+            else:
+                logger.error(f"Failed to download study guide: {out}")
             continue
             
         elif user_input_lower.startswith('/add '):
