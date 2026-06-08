@@ -19,3 +19,6 @@ logs/
 sources/*
 !sources/notes.txt
 !sources/sample.pdf
+
+# VS Code workspace settings
+.vscode/
