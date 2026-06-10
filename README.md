@@ -118,6 +118,11 @@ python notebooklm_demo.py -i
 ```
 - `/add <path_or_url>`: Upload a local PDF/TXT file or URL dynamically.
 - `/list`: Display all ingested sources and their indexing status.
+- `/podcast [prompt]`: Generate and download Audio Podcast to `logs/podcast.mp3`.
+- `/paper [prompt]`: Generate and download Briefing Paper/Report to `logs/paper.md`.
+- `/studyguide`: Generate and download Study Guide to `logs/study_guide.md`.
+- `/quiz [prompt]`: Generate and download a Quiz to `logs/quiz.md`.
+- `/flashcards`: Generate and download Study Flashcards to `logs/flashcards.md`.
 - Type any text: Query the notebook and fetch the RAG response.
 - `/exit`: Quit the interactive loop.
 

@@ -249,6 +249,8 @@ async def interactive_loop(client, notebook_id):
     logger.info("  /podcast [prompt]   - Generate and download Audio Podcast to logs/podcast.mp3")
     logger.info("  /paper [prompt]     - Generate and download Briefing Paper to logs/paper.md")
     logger.info("  /studyguide         - Generate and download Study Guide to logs/study_guide.md")
+    logger.info("  /quiz [prompt]      - Generate and download a Quiz to logs/quiz.md")
+    logger.info("  /flashcards         - Generate and download Flashcards to logs/flashcards.md")
     logger.info("  /exit               - Exit the session")
     logger.info("  Or just type your question to query the notebook.")
     logger.info("="*70 + "\n")
@@ -344,6 +346,44 @@ async def interactive_loop(client, notebook_id):
                 logger.info(f"Success! Study guide downloaded to: {output_file}")
             else:
                 logger.error(f"Failed to download study guide: {out}")
+            continue
+            
+        elif user_input_lower.startswith('/quiz'):
+            prompt = user_input[5:].strip()
+            logger.info("Generating Quiz on Google servers...")
+            
+            gen_args = ["generate", "quiz", "-n", notebook_id, "--wait"]
+            if prompt:
+                gen_args.append(prompt)
+                
+            success, out = run_cli_command(gen_args)
+            if not success:
+                logger.error(f"Failed to generate quiz: {out}")
+                continue
+                
+            logger.info("Quiz complete. Downloading to logs/quiz.md...")
+            output_file = os.path.join(config.LOGS_DIR, "quiz.md")
+            success, out = run_cli_command(["download", "quiz", "-n", notebook_id, "--force", output_file])
+            if success:
+                logger.info(f"Success! Quiz downloaded to: {output_file}")
+            else:
+                logger.error(f"Failed to download quiz: {out}")
+            continue
+
+        elif user_input_lower == '/flashcards':
+            logger.info("Generating Flashcards on Google servers...")
+            success, out = run_cli_command(["generate", "flashcards", "-n", notebook_id, "--wait"])
+            if not success:
+                logger.error(f"Failed to generate flashcards: {out}")
+                continue
+                
+            logger.info("Flashcards complete. Downloading to logs/flashcards.md...")
+            output_file = os.path.join(config.LOGS_DIR, "flashcards.md")
+            success, out = run_cli_command(["download", "flashcards", "-n", notebook_id, "--force", output_file])
+            if success:
+                logger.info(f"Success! Flashcards downloaded to: {output_file}")
+            else:
+                logger.error(f"Failed to download flashcards: {out}")
             continue
             
         elif user_input_lower.startswith('/add '):
