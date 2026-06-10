@@ -1,2 +1,3 @@
 notebooklm-py[browser]==0.7.0
 streamlit
+fpdf2

@@ -45,18 +45,84 @@ async def run_client_op(op_func):
     async with client_ctx as client:
         return await op_func(client)
 
+# PDF Generation Helpers
+def clean_txt_for_pdf(text):
+    replacements = {
+        "“": '"', "”": '"',
+        "‘": "'", "’": "'",
+        "–": "-", "—": "-",
+        "•": "-", "…": "...",
+        "\u201c": '"', "\u201d": '"',
+        "\u2018": "'", "\u2019": "'",
+        "\u2013": "-", "\u2014": "-",
+        "\u2022": "-", "\u200b": ""
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text.encode('latin-1', 'replace').decode('latin-1')
+
+def markdown_to_html(md_text):
+    import re
+    cleaned = clean_txt_for_pdf(md_text)
+    
+    html = ""
+    lines = cleaned.split("\n")
+    in_list = False
+    
+    for line in lines:
+        line = line.rstrip()
+        
+        # Check lists
+        if line.startswith("- ") or line.startswith("* "):
+            if not in_list:
+                html += "<ul>"
+                in_list = True
+            item_text = line[2:]
+            # Replace **bold** with <b>bold</b>
+            item_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', item_text)
+            html += f"<li>{item_text}</li>"
+            continue
+        else:
+            if in_list:
+                html += "</ul>"
+                in_list = False
+                
+        # Check headings
+        if line.startswith("### "):
+            html += f"<h3>{line[4:]}</h3>"
+        elif line.startswith("## "):
+            html += f"<h2>{line[3:]}</h2>"
+        elif line.startswith("# "):
+            html += f"<h1>{line[2:]}</h1>"
+        elif not line:
+            html += "<br/>"
+        else:
+            para_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
+            html += f"<p>{para_text}</p>"
+            
+    if in_list:
+        html += "</ul>"
+        
+    return html
+
+def generate_pdf(content_markdown, title):
+    from fpdf import FPDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_font("Helvetica", size=11)
+    
+    # Render title using HTML as it is safe and format-agnostic
+    html = f"<h1 align='center'>{title}</h1><br/>" + markdown_to_html(content_markdown)
+    pdf.write_html(html)
+    return bytes(pdf.output())
+
 # Define CLI runner for generation tasks
 def run_cli_command(args):
     """Executes a notebooklm CLI command using the virtual environment interpreter."""
     import subprocess
-    cli_exe = os.path.join(config.WORKSPACE_DIR, ".venv", "Scripts", "notebooklm")
-    if sys.platform != 'win32':
-        cli_exe = os.path.join(config.WORKSPACE_DIR, ".venv", "bin", "notebooklm")
-        
-    if not os.path.exists(cli_exe):
-        cli_exe = "notebooklm"  # Fallback to system PATH
-        
-    cmd = [cli_exe] + args
+    # Run python -m notebooklm directly to bypass broken shebangs/launchers
+    cmd = [sys.executable, "-m", "notebooklm"] + args
     try:
         env = os.environ.copy()
         env["PAGER"] = "cat"
@@ -217,22 +283,27 @@ if not st.session_state.auth_ok:
     
     st.markdown("""
     ### How to Authenticate:
-    1. Open your terminal in the project directory.
-    2. Make sure your virtual environment is active:
-       ```bash
-       .venv\\Scripts\\Activate.ps1
-       ```
-    3. Run the login command:
-       ```bash
-       notebooklm login
-       ```
-    4. A browser window will pop up. **Log in to your Google Account** inside it.
-    5. The browser will close automatically. Rerun or check status here.
+    Click the button below to launch the secure Google Login window. 
+    A browser window will pop up. **Log in to your Google Account** inside it. 
+    Once you log in, the window will close automatically, and this dashboard will log you in.
     """)
     
-    if st.button("🔄 Retry Authentication Check"):
-        st.session_state.auth_ok = None
-        st.rerun()
+    col_login, col_retry = st.columns(2)
+    with col_login:
+        if st.button("🔑 Launch Google Login Window", use_container_width=True):
+            with st.spinner("Opening login window... Please check your desktop/taskbar."):
+                success, output = run_cli_command(["login"])
+                if success:
+                    st.success("Login successful! Reloading...")
+                    st.session_state.auth_ok = None
+                    st.rerun()
+                else:
+                    st.error(f"Login failed: {output}")
+                    
+    with col_retry:
+        if st.button("🔄 Retry Authentication Check", use_container_width=True):
+            st.session_state.auth_ok = None
+            st.rerun()
         
     st.markdown("---")
     st.markdown("#### Diagnostics Log:")
@@ -284,8 +355,22 @@ if not notebooks:
 st.sidebar.markdown("# 📓 NotebookLM Studio")
 st.sidebar.markdown("---")
 
-notebook_options = {nb.title: nb.id for nb in notebooks}
-notebook_titles = list(notebook_options.keys())
+# Build unique display names for notebooks to handle duplicates safely
+notebook_titles = []
+notebook_options = {}
+title_counts = {}
+
+for nb in notebooks:
+    title = nb.title or "Untitled Notebook"
+    title_counts[title] = title_counts.get(title, 0) + 1
+    display_title = title
+    if title_counts[title] > 1:
+        display_title = f"{title} ({title_counts[title]})"
+    elif any(nb2.title == title and nb2.id != nb.id for nb2 in notebooks):
+        display_title = f"{title} (1)"
+        
+    notebook_titles.append(display_title)
+    notebook_options[display_title] = nb.id
 
 # Determine default notebook selection index
 default_idx = 0
@@ -295,6 +380,10 @@ if cached_id:
         if nb.id == cached_id:
             default_idx = idx
             break
+
+# Safeguard boundary limits for Streamlit selectbox index selection
+if default_idx >= len(notebook_titles) or default_idx < 0:
+    default_idx = 0
 
 selected_nb_title = st.sidebar.selectbox(
     "Select Notebook",
@@ -310,6 +399,12 @@ if active_nb_id != st.session_state.active_nb_id:
     set_cached_notebook_id(active_nb_id)
     st.session_state.selected_sources = set()
     st.session_state.chat_history = []
+    if "generated_questions" in st.session_state:
+        st.session_state.generated_questions = []
+    if "generated_mcqs" in st.session_state:
+        st.session_state.generated_mcqs = ""
+    if "generated_subjective" in st.session_state:
+        st.session_state.generated_subjective = ""
     st.rerun()
 
 # Sidebar: Create New Notebook
@@ -453,7 +548,7 @@ if sources:
 
 # ----------------- MAIN VIEW PANELS -----------------
 
-tab_chat, tab_studio, tab_status = st.tabs(["💬 Chat Interface", "🎙️ Studio & Reports", "🛠️ Diagnostics"])
+tab_chat, tab_quiz, tab_studio, tab_status = st.tabs(["💬 Chat Interface", "📝 Quiz & QA Generator", "🎙️ Studio & Reports", "🛠️ Diagnostics"])
 
 # Build ID to title maps
 source_id_to_title = {src.id: (src.title or src.url) for src in sources}
@@ -483,12 +578,12 @@ with tab_chat:
                         st.markdown(f"**[{ref['citation_number']}] {src_title}**")
                         st.info(f"\"{ref['cited_text']}\"")
 
-    # Chat Input
-    if prompt := st.chat_input("Ask a question about your sources..."):
+    # Define helper function to run queries
+    def execute_query(query_text):
         # Render and append user prompt
         with st.chat_message("user"):
-            st.markdown(prompt)
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
+            st.markdown(query_text)
+        st.session_state.chat_history.append({"role": "user", "content": query_text})
         
         # Execute query
         with st.chat_message("assistant"):
@@ -496,7 +591,7 @@ with tab_chat:
                 async def ask_chat(client):
                     return await client.chat.ask(
                         active_nb_id,
-                        prompt,
+                        query_text,
                         source_ids=filter_ids
                     )
                 
@@ -525,10 +620,153 @@ with tab_chat:
                         "content": answer,
                         "references": references
                     })
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Failed to query notebook: {e}")
 
-# ----------------- TAB 2: STUDIO & REPORTS -----------------
+    # Render suggested questions from config.py
+    if config.QUESTIONS:
+        st.markdown("##### 💡 Suggested Questions")
+        cols = st.columns(len(config.QUESTIONS))
+        for i, q in enumerate(config.QUESTIONS):
+            if cols[i].button(q, key=f"suggest_{i}", use_container_width=True):
+                execute_query(q)
+
+    # Chat Input
+    if prompt := st.chat_input("Ask a question about your sources..."):
+        execute_query(prompt)
+
+# ----------------- TAB 2: QUIZ & QA GENERATOR -----------------
+with tab_quiz:
+    st.subheader("📝 Quiz & QA Generator")
+    
+    selected_count = len(st.session_state.selected_sources)
+    if selected_count == 0:
+        st.info("🔍 Generations will use **All Ingested Sources** (No checkboxes selected).")
+        filter_ids = None
+    else:
+        st.success(f"🔍 Generations will use **{selected_count} / {len(sources)} selected source(s)**.")
+        filter_ids = list(st.session_state.selected_sources)
+        
+    st.write("Generate a list of all possible Multiple Choice Questions (MCQs) and descriptive subjective Q&As from your sources.")
+    
+    # Initialize states
+    if "generated_mcqs" not in st.session_state:
+        st.session_state.generated_mcqs = ""
+    if "generated_subjective" not in st.session_state:
+        st.session_state.generated_subjective = ""
+        
+    col_mcq, col_sub = st.columns(2)
+    
+    with col_mcq:
+        st.markdown("### 📊 Multiple Choice Questions (MCQs)")
+        st.write("Extract all possible multiple-choice questions with 4 options (A-D) and answers.")
+        
+        if st.button("Generate MCQs Quiz", key="gen_mcq_btn", use_container_width=True):
+            with st.spinner("Extracting MCQs from sources..."):
+                async def ask_mcqs(client):
+                    prompt_mcq = (
+                        "Read the selected sources carefully and generate a comprehensive list of all possible "
+                        "Multiple Choice Questions (MCQs) based on the content. For each question, provide:\n"
+                        "1. The question text.\n"
+                        "2. Four distinct options labeled A, B, C, and D.\n"
+                        "3. The correct answer with a brief explanation from the source.\n\n"
+                        "Make sure the questions cover all key topics, figures, formulas, and facts in the source."
+                    )
+                    return await client.chat.ask(
+                        active_nb_id,
+                        prompt_mcq,
+                        source_ids=filter_ids
+                    )
+                try:
+                    res = run_async(run_client_op(ask_mcqs))
+                    answer = res.answer if hasattr(res, 'answer') else str(res)
+                    st.session_state.generated_mcqs = answer
+                    st.success("MCQs generated successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to generate MCQs: {e}")
+                    
+        if st.session_state.generated_mcqs:
+            st.markdown("#### Generated MCQs Quiz:")
+            st.markdown(st.session_state.generated_mcqs)
+            
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                st.download_button(
+                    label="📥 Download Markdown",
+                    data=st.session_state.generated_mcqs,
+                    file_name=f"mcqs_{active_nb_id}.md",
+                    mime="text/markdown",
+                    use_container_width=True
+                )
+            with col_d2:
+                try:
+                    pdf_data = generate_pdf(st.session_state.generated_mcqs, "Multiple Choice Questions (MCQs)")
+                    st.download_button(
+                        label="📄 Download PDF",
+                        data=pdf_data,
+                        file_name=f"mcqs_{active_nb_id}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"Failed to compile PDF: {e}")
+            
+    with col_sub:
+        st.markdown("### ✍️ Subjective Questions & Answers")
+        st.write("Generate detailed descriptive, conceptual, and analytical questions along with their answers.")
+        
+        if st.button("Generate Subjective Q&A", key="gen_sub_btn", use_container_width=True):
+            with st.spinner("Generating subjective Q&A..."):
+                async def ask_subjective(client):
+                    prompt_sub = (
+                        "Read the selected sources carefully and generate a comprehensive list of subjective, "
+                        "descriptive, conceptual, or analytical questions. For each question, provide a detailed, "
+                        "high-quality, and complete answer fully grounded in the source material.\n\n"
+                        "Ensure the questions cover major arguments, findings, case studies, or processes."
+                    )
+                    return await client.chat.ask(
+                        active_nb_id,
+                        prompt_sub,
+                        source_ids=filter_ids
+                    )
+                try:
+                    res = run_async(run_client_op(ask_subjective))
+                    answer = res.answer if hasattr(res, 'answer') else str(res)
+                    st.session_state.generated_subjective = answer
+                    st.success("Subjective Q&A generated successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to generate subjective Q&A: {e}")
+                    
+        if st.session_state.generated_subjective:
+            st.markdown("#### Generated Subjective Q&A:")
+            st.markdown(st.session_state.generated_subjective)
+            
+            col_d3, col_d4 = st.columns(2)
+            with col_d3:
+                st.download_button(
+                    label="📥 Download Markdown",
+                    data=st.session_state.generated_subjective,
+                    file_name=f"subjective_qa_{active_nb_id}.md",
+                    mime="text/markdown",
+                    use_container_width=True
+                )
+            with col_d4:
+                try:
+                    pdf_data = generate_pdf(st.session_state.generated_subjective, "Subjective Q&As")
+                    st.download_button(
+                        label="📄 Download PDF",
+                        data=pdf_data,
+                        file_name=f"subjective_qa_{active_nb_id}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"Failed to compile PDF: {e}")
+
+# ----------------- TAB 3: STUDIO & REPORTS -----------------
 with tab_studio:
     st.subheader("🎙️ NotebookLM Studio")
     

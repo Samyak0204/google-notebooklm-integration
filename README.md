@@ -144,6 +144,27 @@ Since you are logged in, you can query directly using the `notebooklm` command l
    notebooklm ask "List all action items."
    ```
 
+### Option 5: Streamlit Web UI Dashboard (Highly Recommended)
+We provide a rich, premium Streamlit dashboard with a graphical user interface for managing your notebooks, chatting, generating study materials, and running diagnoses.
+
+To launch the dashboard, run:
+```bash
+python run_ui.py
+```
+This will automatically launch the Streamlit server and open the UI in your default web browser.
+
+#### Key UI Features:
+1. **🔑 Interactive Google Login**: If your session is expired or missing, click the **Launch Google Login Window** button right inside the webpage. It will open the login popup, capture cookies, and log you in automatically.
+2. **📝 Quiz & QA Generator Tab**:
+   - **MCQs**: Extracts all possible Multiple Choice Questions from the video/document with 4 options (A-D) and answers.
+   - **Subjective Q&As**: Generates key conceptual and descriptive questions with detailed grounded answers.
+   - **Dual Download Formats**: Export the generated study materials instantly to **Markdown (.md)** or print-ready **PDF (.pdf)** files.
+3. **🎙️ Studio & Reports Tab**:
+   - Generate simulated double-host discussion **audio podcasts** (.mp3) from selected sources.
+   - Generate detailed briefing papers, study guides, and custom reports.
+4. **💬 Chat Interface Tab**: Clean chat window featuring interactive suggested questions, custom prompts, and reference citations.
+5. **🛠️ Diagnostics Tab**: Run the system diagnostics and CLI doctor tools directly from the webpage.
+
 ---
 
 ## Troubleshooting & Diagnostics
