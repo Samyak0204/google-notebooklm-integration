@@ -229,6 +229,40 @@ def inject_custom_css():
         border: 1px solid rgba(108, 92, 231, 0.1) !important;
         border-radius: 8px !important;
     }
+    
+    /* Explicit text contrast overrides */
+    .stApp p, .stApp label, .stApp li {
+        color: #f1f5f9 !important;
+    }
+    
+    div[data-testid="stMarkdownContainer"] p, 
+    div[data-testid="stMarkdownContainer"] li,
+    div[data-testid="stMarkdownContainer"] span {
+        color: #f1f5f9 !important;
+    }
+    
+    /* Ensure chat message texts are white/light gray */
+    div[data-testid="stChatMessage"] p,
+    div[data-testid="stChatMessage"] span {
+        color: #f1f5f9 !important;
+    }
+    
+    /* Sidebar text color overrides */
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] span {
+        color: #e2e8f0 !important;
+    }
+    
+    /* Selectbox selected item text readability */
+    div[data-baseweb="select"] span {
+        color: #f1f5f9 !important;
+    }
+    
+    /* Ensure drop down menu items remain readable (dark text on white/gray bg) */
+    div[role="listbox"] span, div[role="listbox"] div {
+        color: #0e1117 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -326,6 +360,7 @@ if "active_nb_id" not in st.session_state:
 async def fetch_notebooks(client):
     return await client.notebooks.list()
 
+notebooks = []
 try:
     notebooks = run_async(run_client_op(fetch_notebooks))
     st.session_state.notebooks_cache = notebooks
@@ -391,7 +426,10 @@ selected_nb_title = st.sidebar.selectbox(
     index=default_idx
 )
 
-active_nb_id = notebook_options[selected_nb_title]
+if selected_nb_title in notebook_options:
+    active_nb_id = notebook_options[selected_nb_title]
+else:
+    active_nb_id = notebooks[0].id if notebooks else None
 
 # If active notebook changed, refresh session states
 if active_nb_id != st.session_state.active_nb_id:
