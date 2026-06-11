@@ -148,6 +148,11 @@ def inject_custom_css():
         background: radial-gradient(circle at 50% 50%, #17162E 0%, #090A0F 100%);
     }
     
+    /* Hide Streamlit Hamburger Menu, Header and Footer to lock theme settings */
+    #MainMenu {visibility: hidden;}
+    header[data-testid="stHeader"] {visibility: hidden;}
+    footer {visibility: hidden;}
+    
     /* Styled headings */
     h1, h2, h3 {
         font-weight: 700 !important;
